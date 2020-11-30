@@ -447,6 +447,20 @@ kill(int pid)
   return -1;
 }
 
+// Sum up all processes read called time.
+int
+gettotalreadcount(void)
+{
+  struct proc *p;
+  int total_readcount = 0;
+  acquire(&ptable.lock);  //DOC: yieldlock
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    total_readcount += p->readcount;
+  }
+  release(&ptable.lock);
+  return total_readcount;
+}
+
 //PAGEBREAK: 36
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
