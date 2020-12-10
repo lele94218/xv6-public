@@ -49,6 +49,8 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  // At first each process hold one ticket.
+  p->tickets = 1;
 
   release(&ptable.lock);
 
@@ -85,7 +87,7 @@ userinit(void)
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
   p = allocproc();
-  
+
   initproc = p;
   if((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
@@ -174,6 +176,7 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
+  np->tickets = proc->tickets;
 
   release(&ptable.lock);
 
@@ -276,8 +279,9 @@ wait(void)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
+
 void
-scheduler(void)
+scheduler1(void)
 {
   struct proc *p;
 
@@ -295,6 +299,7 @@ scheduler(void)
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
       proc = p;
+      cprintf("%d %s\n", p->pid, p->name);
       switchuvm(p);
       p->state = RUNNING;
       swtch(&cpu->scheduler, p->context);
@@ -308,6 +313,58 @@ scheduler(void)
 
   }
 }
+
+// Lottery scheduler.
+void
+scheduler(void)
+{
+  struct proc *p;
+  int total_tickets;
+  int winner;
+  int counter;
+
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    // Refresh total tickets.
+    total_tickets = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if (p->state == RUNNABLE || p->state == SLEEPING)
+        total_tickets += p->tickets;
+    }
+    // TODO: fix srand with timestamp.
+    // TODO: fix random distribution.
+    winner = (int)(rand() % (unsigned int)total_tickets);
+    winner %= total_tickets;
+    // cprintf("t: %d w: %d\n", total_tickets, winner);
+    // procdump();
+    counter = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+      counter += p->tickets;
+      if(counter > winner){
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire it
+        // before jumping back to us.
+        proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+        swtch(&cpu->scheduler, p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        proc = 0;
+        break;
+      }
+    }
+    release(&ptable.lock);
+  }
+}
+
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
@@ -453,7 +510,7 @@ gettotalreadcount(void)
 {
   struct proc *p;
   int total_readcount = 0;
-  acquire(&ptable.lock);  //DOC: yieldlock
+  acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     total_readcount += p->readcount;
   }
@@ -488,7 +545,7 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
+    cprintf("%d %s %s %d", p->pid, state, p->name, p->tickets);
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
