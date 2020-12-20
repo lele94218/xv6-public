@@ -280,44 +280,12 @@ wait(void)
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
 
-void
-scheduler1(void)
-{
-  struct proc *p;
-
-  for(;;){
-    // Enable interrupts on this processor.
-    sti();
-
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      cprintf("%d %s\n", p->pid, p->name);
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      proc = 0;
-    }
-    release(&ptable.lock);
-
-  }
-}
-
+#ifdef LOTTERY_SCHED
 // Lottery scheduler.
 void
 scheduler(void)
 {
+  cprintf("Entering lottery scheduler...\n");
   struct proc *p;
   int total_tickets;
   int winner;
@@ -334,9 +302,10 @@ scheduler(void)
       if (p->state == RUNNABLE || p->state == SLEEPING)
         total_tickets += p->tickets;
     }
-    // TODO: fix srand with timestamp.
     // TODO: fix random distribution.
-    winner = (int)(rand() % (unsigned int)total_tickets);
+    uint ticks = (int)(rdstclo());
+    srand(ticks);
+    winner = (int)(rand() % (uint)total_tickets);
     winner %= total_tickets;
     // cprintf("t: %d w: %d\n", total_tickets, winner);
     // procdump();
@@ -365,6 +334,43 @@ scheduler(void)
   }
 }
 
+#else
+
+void
+scheduler(void)
+{
+  cprintf("Entering default scheduler...\n");
+  struct proc *p;
+
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&cpu->scheduler, p->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      proc = 0;
+    }
+    release(&ptable.lock);
+
+  }
+}
+
+#endif
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores

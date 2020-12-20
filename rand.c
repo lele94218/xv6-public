@@ -1,8 +1,9 @@
 // TODO: it's thread unsafe.
+#include "types.h"
 
-unsigned long randstate = 1;
+uint randstate = 1;
 
-unsigned long
+uint
 rand()
 {
   randstate = randstate * 1664525 + 1013904223;
@@ -10,7 +11,7 @@ rand()
 }
 
 void
-srand(unsigned long x)
+srand(uint x)
 {
   randstate = x;
 }
