@@ -117,6 +117,8 @@ int             wait(void);
 void            wakeup(void*);
 void            yield(void);
 int             gettotalreadcount(void);
+int             settickets(int number);
+int             getticks(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

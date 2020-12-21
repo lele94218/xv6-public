@@ -65,6 +65,7 @@ struct proc {
   char name[16];               // Process name (debugging)
   int readcount;               // sys_read called time
   int tickets;                 // Number of tickets hold on this process in lottery scheduling.
+  int ticks;                   // Number of ticks has accumulated
 };
 
 // Process memory is laid out contiguously, low addresses first:

@@ -95,3 +95,18 @@ sys_getreadcount(void)
 {
   return gettotalreadcount();
 }
+
+int
+sys_settickets(void)
+{
+  int number;
+  if(argint(0, &number) < 0)
+    return -1;
+  return settickets(number);
+}
+
+int
+sys_getticks(void)
+{
+  return getticks();
+}

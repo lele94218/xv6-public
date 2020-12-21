@@ -51,6 +51,7 @@ found:
   p->pid = nextpid++;
   // At first each process hold one ticket.
   p->tickets = 1;
+  p->ticks = 0;
 
   release(&ptable.lock);
 
@@ -299,28 +300,27 @@ scheduler(void)
     // Refresh total tickets.
     total_tickets = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if (p->state == RUNNABLE || p->state == SLEEPING)
-        total_tickets += p->tickets;
+      total_tickets += p->tickets;
     }
     // TODO: fix random distribution.
     uint ticks = (int)(rdstclo());
     srand(ticks);
     winner = (int)(rand() % (uint)total_tickets);
     winner %= total_tickets;
-    // cprintf("t: %d w: %d\n", total_tickets, winner);
-    // procdump();
     counter = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
       counter += p->tickets;
       if(counter > winner){
+        // cprintf("winner is %d\n", p->pid);
         // Switch to chosen process.  It is the process's job
         // to release ptable.lock and then reacquire it
         // before jumping back to us.
         proc = p;
         switchuvm(p);
         p->state = RUNNING;
+        p->ticks++;
         swtch(&cpu->scheduler, p->context);
         switchkvm();
 
@@ -358,6 +358,7 @@ scheduler(void)
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
+      p->ticks++;
       swtch(&cpu->scheduler, p->context);
       switchkvm();
 
@@ -522,6 +523,21 @@ gettotalreadcount(void)
   }
   release(&ptable.lock);
   return total_readcount;
+}
+
+int
+settickets(int number)
+{
+  if(number < 1)
+    return -1;
+  proc->tickets = number;
+  return 1;
+}
+
+int
+getticks(void)
+{
+  return proc->ticks;
 }
 
 //PAGEBREAK: 36
